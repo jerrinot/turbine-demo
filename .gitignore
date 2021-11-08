@@ -1,0 +1,17 @@
+.project
+.project/
+.classpath
+.settings/
+bin/
+*.iml
+*.ipr
+*.iws
+.idea/
+.DS_Store
+.gradle/
+build/
+cli/cli
+/docs/test/
+/docs/node_modules/
+/docs/package-lock.json
+node_modules
