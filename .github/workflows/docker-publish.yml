@@ -36,7 +36,7 @@ jobs:
           push: true
           tags: jerrinot/turbine-demo-ping:latest
 
-      - name: Build and push pong service
+      - name: Build and push pong service, test
         id: docker_build_pong
         uses: docker/build-push-action@v2
         with:
