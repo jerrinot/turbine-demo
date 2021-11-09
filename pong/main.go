@@ -9,7 +9,7 @@ import (
 func main() {
 	http.HandleFunc("/turbine/config", turbineConfigHandler)
 	http.HandleFunc("/ping", pingHandler)
-	log.Println("pong-service available at localhost:3001")
+	log.Println("pong-service available at localhost:3000")
 	log.Fatal(http.ListenAndServe(":3000", nil))
 }
 

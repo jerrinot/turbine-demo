@@ -26,8 +26,8 @@ func turbineConfigHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func pingPongHandler(w http.ResponseWriter, r *http.Request) {
-	// invocationURL := "http://localhost:8466/v1/call/pong-service/ping"
-	invocationURL := "http://pong-service:3000/ping"
+	invocationURL := "http://localhost:8466/v1/call/pong-service/ping"
+	//invocationURL := "http://pong-service:3000/ping"
 	pingRequest, err := http.NewRequest(http.MethodGet, invocationURL, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
