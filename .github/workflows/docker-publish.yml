@@ -7,7 +7,6 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,3 +43,12 @@ jobs:
           file: ./pong/Dockerfile
           push: true
           tags: jerrinot/turbine-demo-pong:latest
+
+      - name: Build and push hook listener service
+        id: docker_build_hook_listener
+        uses: docker/build-push-action@v2
+        with:
+          context: ./hook-listener
+          file: ./hook-listener/Dockerfile
+          push: true
+          tags: jerrinot/turbine-demo-hook-listener:latest
