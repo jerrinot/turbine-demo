@@ -50,11 +50,11 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 	// creates the clientset
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return
+		panic(err.Error())
 	}
 	pods, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		return
+		panic(err.Error())
 	}
 	fmt.Printf("There are %d pods in the cluster\n", len(pods.Items))
 }
