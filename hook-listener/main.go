@@ -52,11 +52,19 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		panic(err.Error())
 	}
-	pods, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
+	deployments, err := clientset.AppsV1().Deployments("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		panic(err.Error())
 	}
-	fmt.Printf("There are %d pods in the cluster\n", len(pods.Items))
+	for _, deployment := range deployments.Items {
+		if val, ok := deployment.Annotations["turbine/enabled"]; ok {
+			if "true" == val {
+				fmt.Println(deployment)
+			}
+		}
+	}
+
+	fmt.Printf("There are %d deployments in the cluster\n", len(deployments.Items))
 }
 
 func main() {
