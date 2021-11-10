@@ -14,6 +14,7 @@ spec:
       labels:
         app: hook-listener-service
     spec:
+      serviceAccountName: hook-listener
       containers:
         - name: hook-listener
           image: jerrinot/turbine-demo-hook-listener
