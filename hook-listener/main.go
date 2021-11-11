@@ -67,8 +67,13 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 	fmt.Printf("There are %d deployments in the cluster\n", len(deployments.Items))
 }
 
+func handleGithubRequest(w http.ResponseWriter, req *http.Request) {
+	fmt.Println("I just received a request from Github action")
+}
+
 func main() {
 	http.HandleFunc("/webhook", handleHookRequest)
 	http.HandleFunc("/k8s", handleKubernetesRequest)
+	http.HandleFunc("/gh-action", handleGithubRequest)
 	http.ListenAndServe(":8080", nil)
 }
