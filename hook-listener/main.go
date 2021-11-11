@@ -57,18 +57,15 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 
 	}
 	deploymentClient := clientset.AppsV1().Deployments("default")
-	fmt.Println("Deployment updated successfully!")
-
 	deployments, err := deploymentClient.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		panic(err.Error())
 	}
 	for _, deployment := range deployments.Items {
 		if val, ok := deployment.Spec.Template.Annotations["turbine/enabled"]; ok {
-			restartDeployment(deployment.Name, deploymentClient)
 			fmt.Printf("Deployment %s has annotation turbine/enabled set to %s\n", deployment.Name, val)
 			if "true" == val {
-				fmt.Println(deployment)
+				restartDeployment(deployment.Name, deploymentClient)
 			}
 		}
 	}
@@ -78,7 +75,7 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 
 func restartDeployment(deploymentName string, deploymentClient v1.DeploymentInterface) {
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		fmt.Printf("Trying to restart deployment %s", deploymentName)
+		fmt.Printf("Trying to restart deployment %s\n", deploymentName)
 		var result, getErr = deploymentClient.Get(context.TODO(), deploymentName, metav1.GetOptions{})
 		if getErr != nil {
 			panic(fmt.Errorf("Failed to get latest version of Deployment: %v", getErr))
