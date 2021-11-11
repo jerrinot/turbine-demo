@@ -54,7 +54,7 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		panic(err.Error())
 	}
-	deploymentsClient := clientset.AppsV1().Deployments("")
+	deploymentsClient := clientset.AppsV1().Deployments("default")
 	deployments, err := deploymentsClient.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		panic(err.Error())
