@@ -55,11 +55,6 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 		panic(err.Error())
 	}
 	deploymentsClient := clientset.AppsV1().Deployments("default")
-	deployments, err := deploymentsClient.List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		panic(err.Error())
-	}
-
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		fmt.Println("Trying to restart deployment ping-service")
 		result, getErr := deploymentsClient.Get(context.TODO(), "ping-service", metav1.GetOptions{})
@@ -75,14 +70,19 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 		panic(fmt.Errorf("Update failed: %v", retryErr))
 	}
 	fmt.Println("Deployment updated successfully!")
+
+	deployments, err := deploymentsClient.List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		panic(err.Error())
+	}
 	for _, deployment := range deployments.Items {
 		if val, ok := deployment.Spec.Template.Annotations["turbine/enabled"]; ok {
-			fmt.Printf("Deployment %s has annotation turbine/enabled set to %s", deployment.Name, val)
+			fmt.Printf("Deployment %s has annotation turbine/enabled set to %s\n", deployment.Name, val)
 			if "true" == val {
 				fmt.Println(deployment)
 			}
 		} else {
-			fmt.Printf("Deployment %s has these annotations: ", deployment.Spec.Template.Annotations)
+			fmt.Printf("Deployment %s has these annotations: %s\n", deployment.Name, deployment.Spec.Template.Annotations)
 		}
 	}
 
