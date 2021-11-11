@@ -76,11 +76,13 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 	}
 	fmt.Println("Deployment updated successfully!")
 	for _, deployment := range deployments.Items {
-		if val, ok := deployment.Annotations["turbine/enabled"]; ok {
+		if val, ok := deployment.Spec.Template.Annotations["turbine/enabled"]; ok {
 			fmt.Printf("Deployment %s has annotation turbine/enabled set to %s", deployment.Name, val)
 			if "true" == val {
 				fmt.Println(deployment)
 			}
+		} else {
+			fmt.Printf("Deployment %s has these annotations: ", deployment.Spec.Template.Annotations)
 		}
 	}
 
