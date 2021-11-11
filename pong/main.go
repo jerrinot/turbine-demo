@@ -21,5 +21,5 @@ func turbineConfigHandler(w http.ResponseWriter, r *http.Request) {
 
 func pingHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("PONG!\n"))
+	w.Write([]byte("Hazelcast PONG!!!\n"))
 }
