@@ -7,7 +7,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	"net/http"
+	"time"
 )
 
 type Repository struct {
@@ -52,12 +54,30 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		panic(err.Error())
 	}
-	deployments, err := clientset.AppsV1().Deployments("").List(context.TODO(), metav1.ListOptions{})
+	deploymentsClient := clientset.AppsV1().Deployments("")
+	deployments, err := deploymentsClient.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		panic(err.Error())
 	}
+
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		fmt.Println("Trying to restart deployment ping-service")
+		result, getErr := deploymentsClient.Get(context.TODO(), "ping-service", metav1.GetOptions{})
+		if getErr != nil {
+			panic(fmt.Errorf("Failed to get latest version of Deployment: %v", getErr))
+		}
+
+		result.Spec.Template.Annotations["turbine/restartedAt"] = time.Now().Format(time.RFC3339)
+		_, updateErr := deploymentsClient.Update(context.TODO(), result, metav1.UpdateOptions{})
+		return updateErr
+	})
+	if retryErr != nil {
+		panic(fmt.Errorf("Update failed: %v", retryErr))
+	}
+	fmt.Println("Deployment updated successfully!")
 	for _, deployment := range deployments.Items {
 		if val, ok := deployment.Annotations["turbine/enabled"]; ok {
+			fmt.Printf("Deployment %s has annotation turbine/enabled set to %s", deployment.Name, val)
 			if "true" == val {
 				fmt.Println(deployment)
 			}
