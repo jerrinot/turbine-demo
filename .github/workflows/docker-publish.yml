@@ -45,6 +45,7 @@ jobs:
         with:
           context: ./services/ping-pong/ping
           file: ./services/ping-pong/ping/Dockerfile
+          builder: ${{ steps.buildx.outputs.name }}
           push: true
           tags: jerrinot/turbine-demo-ping:latest
           cache-from: type=local,src=/tmp/.buildx-cache
@@ -56,6 +57,7 @@ jobs:
         with:
           context: ./services/ping-pong/pong
           file: ./services/ping-pong/pong/Dockerfile
+          builder: ${{ steps.buildx.outputs.name }}
           push: true
           tags: jerrinot/turbine-demo-pong:latest
           cache-from: type=local,src=/tmp/.buildx-cache
@@ -72,6 +74,3 @@ jobs:
           tags: jerrinot/turbine-demo-hook-listener:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
-        
-      - name: Image digest
-        run: echo ${{ steps.docker_build.outputs.digest }}
