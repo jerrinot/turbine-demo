@@ -30,8 +30,8 @@ jobs:
         id: docker_build_ping
         uses: docker/build-push-action@v2
         with:
-          context: ./ping
-          file: ./ping/Dockerfile
+          context: ./services/ping-pong/ping
+          file: ./services/ping-pong/ping/Dockerfile
           push: true
           tags: jerrinot/turbine-demo-ping:latest
 
@@ -39,8 +39,8 @@ jobs:
         id: docker_build_pong
         uses: docker/build-push-action@v2
         with:
-          context: ./pong
-          file: ./pong/Dockerfile
+          context: ./services/ping-pong/pong
+          file: ./services/ping-pong/pong/Dockerfile
           push: true
           tags: jerrinot/turbine-demo-pong:latest
 
