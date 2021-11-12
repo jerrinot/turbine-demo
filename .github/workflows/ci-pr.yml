@@ -44,7 +44,7 @@ jobs:
         working-directory: ./hook-listener
         run: |
           go mod download \
-          go build -v ./...
+          go build -v .
 
       - name: Build hook listener
         id: docker_build_hook_listener
