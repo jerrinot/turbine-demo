@@ -43,6 +43,7 @@ jobs:
       - name: Fetch require Go modules and build
         working-directory: ./hook-listener
         run: |
+          pwd
           go mod download \
           go build -v .
 
