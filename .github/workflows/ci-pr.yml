@@ -61,5 +61,8 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache
 
       - name: functional test
+        working-directory: ./hook-listener
         id: functional-test
-        run: go test -v ./...
+        run: |
+          pwd \
+          go test -v ./...
