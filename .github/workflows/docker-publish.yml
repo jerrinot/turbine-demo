@@ -48,7 +48,7 @@ jobs:
         id: docker_build_hook_listener
         uses: docker/build-push-action@v2
         with:
-          context: ./services/hook-listener
-          file: ./services/hook-listener/Dockerfile
+          context: ./hook-listener
+          file: ./hook-listener/Dockerfile
           push: true
           tags: jerrinot/turbine-demo-hook-listener:latest
