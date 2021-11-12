@@ -42,10 +42,9 @@ jobs:
       
       - name: Fetch require Go modules and build
         working-directory: ./hook-listener
-        run: |
-          pwd \
+        run:  |
           go mod download \
-          go build -v .
+          go build -v ./...
 
       - name: Build hook listener
         id: docker_build_hook_listener
@@ -64,5 +63,4 @@ jobs:
         working-directory: ./hook-listener
         id: functional-test
         run: |
-          pwd \
           go test -v ./...
