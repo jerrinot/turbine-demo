@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	v12 "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/apps/v1"
@@ -13,6 +14,13 @@ import (
 	"net/http"
 	"time"
 )
+
+type TurbineService struct {
+	Name     string `json:"name"`
+	Image    string `json:"image"`
+	Port     int32  `json:"port"`
+	Replicas int32  `json:"replicas"`
+}
 
 type Repository struct {
 	RepoName  string `json:"repo_name"`
@@ -77,12 +85,12 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 	fmt.Printf("There are %d deployments in the cluster\n", len(deployments.Items))
 }
 
-func isTurbineApp(deployment v12.Deployment) bool {
+func isTurbineApp(deployment appsv1.Deployment) bool {
 	val, ok := deployment.Spec.Template.Annotations["turbine/enabled"]
 	return ok && "true" == val
 }
 
-func containsContainer(deployment v12.Deployment, containerName string) bool {
+func containsContainer(deployment appsv1.Deployment, containerName string) bool {
 	for _, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Image == containerName {
 			return true
@@ -105,17 +113,99 @@ func restartDeployment(deploymentName string, deploymentClient v1.DeploymentInte
 	})
 }
 
-func handleGithubRequest(w http.ResponseWriter, req *http.Request) {
-	fmt.Println("I just received a request from Github action")
+func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
+	fmt.Println("I just received a request to deploy a new service")
+	switch req.Method {
+	case "POST":
+		var applicationDescriptor TurbineService
+		//todo: validate the descriptor
+
+		if err := json.NewDecoder(req.Body).Decode(&applicationDescriptor); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		_, err := deploymentClient.Get(context.TODO(), applicationDescriptor.Name, metav1.GetOptions{})
+		if err == nil {
+			http.Error(w, "Deployment already exist", http.StatusBadRequest)
+			return
+		}
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: applicationDescriptor.Name,
+				Labels: map[string]string{
+					"app": applicationDescriptor.Name,
+				},
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: int32Ptr(applicationDescriptor.Replicas),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": applicationDescriptor.Name,
+					},
+				},
+				Template: apiv1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app": applicationDescriptor.Name,
+						},
+						Annotations: map[string]string{
+							"turbine/configmap": "turbine-sidecar-config",
+							"turbine/enabled":   "true",
+						},
+					},
+					Spec: apiv1.PodSpec{
+						Containers: []apiv1.Container{
+							{
+								Name:  applicationDescriptor.Name,
+								Image: applicationDescriptor.Image,
+								Ports: []apiv1.ContainerPort{
+									{
+										ContainerPort: applicationDescriptor.Port,
+									},
+								},
+								ImagePullPolicy: apiv1.PullAlways,
+							},
+							{
+								Name:  "turbine-sidecar",
+								Image: "hazelcast/turbine-sidecar",
+								Env: []apiv1.EnvVar{
+									{
+										Name: "TURBINE_POD_IP",
+										ValueFrom: &apiv1.EnvVarSource{
+											FieldRef: &apiv1.ObjectFieldSelector{
+												FieldPath: "status.podIP",
+											},
+										},
+									},
+								},
+								EnvFrom: []apiv1.EnvFromSource{
+									{
+										ConfigMapRef: &apiv1.ConfigMapEnvSource{
+											LocalObjectReference: apiv1.LocalObjectReference{
+												Name: "turbine-sidecar-config",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		fmt.Printf("About to create this deployment %s", deployment)
+		deployment, err = deploymentClient.Create(context.TODO(), deployment, metav1.CreateOptions{})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	default:
+		http.Error(w, "Unsupported HTTP method, this is POST-only", http.StatusBadRequest)
+	}
 }
 
-func main() {
-	deploymentClient = createDeploymentClient("default")
-
-	http.HandleFunc("/webhook", handleHookRequest)
-	http.HandleFunc("/k8s", handleKubernetesRequest)
-	http.HandleFunc("/gh-action", handleGithubRequest)
-	http.ListenAndServe(":8080", nil)
+func handleGithubRequest(w http.ResponseWriter, req *http.Request) {
+	fmt.Println("I just received a request from Github action")
 }
 
 func createDeploymentClient(namespace string) v1.DeploymentInterface {
@@ -128,4 +218,16 @@ func createDeploymentClient(namespace string) v1.DeploymentInterface {
 		panic(err.Error())
 	}
 	return clientset.AppsV1().Deployments(namespace)
+}
+
+func int32Ptr(i int32) *int32 { return &i }
+
+func main() {
+	deploymentClient = createDeploymentClient("default")
+
+	http.HandleFunc("/webhook", handleHookRequest)
+	http.HandleFunc("/k8s", handleKubernetesRequest)
+	http.HandleFunc("/gh-action", handleGithubRequest)
+	http.HandleFunc("/deployment", handleDeploymentRequest)
+	http.ListenAndServe(":8080", nil)
 }
