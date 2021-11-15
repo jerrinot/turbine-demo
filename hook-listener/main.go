@@ -24,6 +24,11 @@ type TurbineService struct {
 	Expose   bool   `json:"expose"`
 }
 
+func (c TurbineService) String() string {
+	return fmt.Sprintf("Name: %s, Image: %s, Port: %d, Replicas: %d, Expose: %t", c.Name,
+		c.Image, c.Port, c.Replicas, c.Expose)
+}
+
 type Repository struct {
 	RepoName  string `json:"repo_name"`
 	RepoUrl   string `json:"repo_url"`
@@ -88,6 +93,43 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 	fmt.Printf("There are %d deployments in the cluster\n", len(deployments.Items))
 }
 
+func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
+	fmt.Println("I just received a request to deploy a new service")
+	switch req.Method {
+	case "POST":
+		var applicationDescriptor TurbineService
+		//todo: validate the descriptor
+
+		if err := json.NewDecoder(req.Body).Decode(&applicationDescriptor); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		fmt.Printf("Request to deploy a new application: %s\n", applicationDescriptor)
+		_, err := deploymentClient.Get(context.TODO(), applicationDescriptor.Name, metav1.GetOptions{})
+		if err == nil {
+			http.Error(w, "Deployment already exist", http.StatusBadRequest)
+			return
+		}
+		deployment := constructDeploymentDescriptor(applicationDescriptor)
+		deployment, err = deploymentClient.Create(context.TODO(), deployment, metav1.CreateOptions{})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if applicationDescriptor.Expose {
+			service := constructServiceDescriptor(applicationDescriptor)
+			_, err := serviceClient.Create(context.TODO(), service, metav1.CreateOptions{})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+	default:
+		http.Error(w, "Unsupported HTTP method, this is POST-only", http.StatusBadRequest)
+	}
+}
+
 func isTurbineApp(deployment appsv1.Deployment) bool {
 	val, ok := deployment.Spec.Template.Annotations["turbine/enabled"]
 	return ok && "true" == val
@@ -116,42 +158,6 @@ func restartDeployment(deploymentName string, deploymentClient v1.DeploymentInte
 	})
 }
 
-func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
-	fmt.Println("I just received a request to deploy a new service")
-	switch req.Method {
-	case "POST":
-		var applicationDescriptor TurbineService
-		//todo: validate the descriptor
-
-		if err := json.NewDecoder(req.Body).Decode(&applicationDescriptor); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		_, err := deploymentClient.Get(context.TODO(), applicationDescriptor.Name, metav1.GetOptions{})
-		if err == nil {
-			http.Error(w, "Deployment already exist", http.StatusBadRequest)
-			return
-		}
-		deployment := constructDeploymentDescriptor(applicationDescriptor)
-		deployment, err = deploymentClient.Create(context.TODO(), deployment, metav1.CreateOptions{})
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		if applicationDescriptor.Expose {
-			service := constructServiceDescriptor(applicationDescriptor)
-			_, err := serviceClient.Create(context.TODO(), service, metav1.CreateOptions{})
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-		}
-	default:
-		http.Error(w, "Unsupported HTTP method, this is POST-only", http.StatusBadRequest)
-	}
-}
-
 func constructServiceDescriptor(applicationDescriptor TurbineService) *apiv1.Service {
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -170,6 +176,7 @@ func constructServiceDescriptor(applicationDescriptor TurbineService) *apiv1.Ser
 			Selector: map[string]string{
 				"app": applicationDescriptor.Name,
 			},
+			Type: "LoadBalancer",
 		},
 	}
 	return service
