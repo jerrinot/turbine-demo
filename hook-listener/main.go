@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/apps/v1"
+	v12 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 	"net/http"
@@ -20,6 +21,7 @@ type TurbineService struct {
 	Image    string `json:"image"`
 	Port     int32  `json:"port"`
 	Replicas int32  `json:"replicas"`
+	Expose   bool   `json:"expose"`
 }
 
 type Repository struct {
@@ -41,6 +43,7 @@ type DockerHubEvent struct {
 }
 
 var deploymentClient v1.DeploymentInterface
+var serviceClient v12.ServiceInterface
 
 func handleHookRequest(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
@@ -129,86 +132,122 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "Deployment already exist", http.StatusBadRequest)
 			return
 		}
-		deployment := &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: applicationDescriptor.Name,
-				Labels: map[string]string{
-					"app": applicationDescriptor.Name,
-				},
-			},
-			Spec: appsv1.DeploymentSpec{
-				Replicas: int32Ptr(applicationDescriptor.Replicas),
-				Selector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{
-						"app": applicationDescriptor.Name,
-					},
-				},
-				Template: apiv1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: map[string]string{
-							"app": applicationDescriptor.Name,
-						},
-						Annotations: map[string]string{
-							"turbine/configmap": "turbine-sidecar-config",
-							"turbine/enabled":   "true",
-						},
-					},
-					Spec: apiv1.PodSpec{
-						Containers: []apiv1.Container{
-							{
-								Name:  applicationDescriptor.Name,
-								Image: applicationDescriptor.Image,
-								Ports: []apiv1.ContainerPort{
-									{
-										ContainerPort: applicationDescriptor.Port,
-									},
-								},
-								ImagePullPolicy: apiv1.PullAlways,
-							},
-							{
-								Name:  "turbine-sidecar",
-								Image: "hazelcast/turbine-sidecar",
-								Env: []apiv1.EnvVar{
-									{
-										Name: "TURBINE_POD_IP",
-										ValueFrom: &apiv1.EnvVarSource{
-											FieldRef: &apiv1.ObjectFieldSelector{
-												FieldPath: "status.podIP",
-											},
-										},
-									},
-								},
-								EnvFrom: []apiv1.EnvFromSource{
-									{
-										ConfigMapRef: &apiv1.ConfigMapEnvSource{
-											LocalObjectReference: apiv1.LocalObjectReference{
-												Name: "turbine-sidecar-config",
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-		fmt.Printf("About to create this deployment %s", deployment)
+		deployment := constructDeploymentDescriptor(applicationDescriptor)
 		deployment, err = deploymentClient.Create(context.TODO(), deployment, metav1.CreateOptions{})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
+		}
+
+		if applicationDescriptor.Expose {
+			service := constructServiceDescriptor(applicationDescriptor)
+			_, err := serviceClient.Create(context.TODO(), service, metav1.CreateOptions{})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 		}
 	default:
 		http.Error(w, "Unsupported HTTP method, this is POST-only", http.StatusBadRequest)
 	}
 }
 
+func constructServiceDescriptor(applicationDescriptor TurbineService) *apiv1.Service {
+	service := &apiv1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: applicationDescriptor.Name,
+			Labels: map[string]string{
+				"app": applicationDescriptor.Name,
+			},
+		},
+		Spec: apiv1.ServiceSpec{
+			Ports: []apiv1.ServicePort{
+				{
+					Port:     applicationDescriptor.Port,
+					Protocol: apiv1.ProtocolTCP,
+				},
+			},
+			Selector: map[string]string{
+				"app": applicationDescriptor.Name,
+			},
+		},
+	}
+	return service
+}
+
+func constructDeploymentDescriptor(applicationDescriptor TurbineService) *appsv1.Deployment {
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: applicationDescriptor.Name,
+			Labels: map[string]string{
+				"app": applicationDescriptor.Name,
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: int32Ptr(applicationDescriptor.Replicas),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": applicationDescriptor.Name,
+				},
+			},
+			Template: apiv1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app": applicationDescriptor.Name,
+					},
+					Annotations: map[string]string{
+						"turbine/configmap": "turbine-sidecar-config",
+						"turbine/enabled":   "true",
+					},
+				},
+				Spec: apiv1.PodSpec{
+					Containers: []apiv1.Container{
+						{
+							Name:  applicationDescriptor.Name,
+							Image: applicationDescriptor.Image,
+							Ports: []apiv1.ContainerPort{
+								{
+									ContainerPort: applicationDescriptor.Port,
+								},
+							},
+							ImagePullPolicy: apiv1.PullAlways,
+						},
+						{
+							Name:  "turbine-sidecar",
+							Image: "hazelcast/turbine-sidecar",
+							Env: []apiv1.EnvVar{
+								{
+									Name: "TURBINE_POD_IP",
+									ValueFrom: &apiv1.EnvVarSource{
+										FieldRef: &apiv1.ObjectFieldSelector{
+											FieldPath: "status.podIP",
+										},
+									},
+								},
+							},
+							EnvFrom: []apiv1.EnvFromSource{
+								{
+									ConfigMapRef: &apiv1.ConfigMapEnvSource{
+										LocalObjectReference: apiv1.LocalObjectReference{
+											Name: "turbine-sidecar-config",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	return deployment
+}
+
 func handleGithubRequest(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("I just received a request from Github action")
 }
 
-func createDeploymentClient(namespace string) v1.DeploymentInterface {
+func createClients(namespace string) (v1.DeploymentInterface, v12.ServiceInterface) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		panic(err.Error())
@@ -217,13 +256,16 @@ func createDeploymentClient(namespace string) v1.DeploymentInterface {
 	if err != nil {
 		panic(err.Error())
 	}
-	return clientset.AppsV1().Deployments(namespace)
+	deploymentClient := clientset.AppsV1().Deployments(namespace)
+	serviceClient := clientset.CoreV1().Services(namespace)
+
+	return deploymentClient, serviceClient
 }
 
 func int32Ptr(i int32) *int32 { return &i }
 
 func main() {
-	deploymentClient = createDeploymentClient("default")
+	deploymentClient, serviceClient = createClients("default")
 
 	http.HandleFunc("/webhook", handleHookRequest)
 	http.HandleFunc("/k8s", handleKubernetesRequest)
