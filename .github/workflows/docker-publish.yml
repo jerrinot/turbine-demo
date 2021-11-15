@@ -26,6 +26,14 @@ jobs:
         id: buildx
         uses: docker/setup-buildx-action@v1
 
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
       - name: Build and push ping service
         id: docker_build_ping
         uses: docker/build-push-action@v2
@@ -34,8 +42,8 @@ jobs:
           file: ./services/ping-pong/ping/Dockerfile
           push: true
           tags: jerrinot/turbine-demo-ping:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
 
       - name: Build and push pong service, test
         id: docker_build_pong
@@ -45,8 +53,8 @@ jobs:
           file: ./services/ping-pong/pong/Dockerfile
           push: true
           tags: jerrinot/turbine-demo-pong:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
 
       - name: Build and push hook listener service
         id: docker_build_hook_listener
@@ -56,5 +64,10 @@ jobs:
           file: ./hook-listener/Dockerfile
           push: true
           tags: jerrinot/turbine-demo-hook-listener:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
