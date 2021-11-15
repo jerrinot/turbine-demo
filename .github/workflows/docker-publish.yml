@@ -43,7 +43,7 @@ jobs:
           push: true
           tags: jerrinot/turbine-demo-ping:latest
           cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          cache-to: type=local,dest=/tmp/.buildx-cache-ping
 
       - name: Build and push pong service, test
         id: docker_build_pong
@@ -54,7 +54,7 @@ jobs:
           push: true
           tags: jerrinot/turbine-demo-pong:latest
           cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          cache-to: type=local,dest=/tmp/.buildx-cache-pong
 
       - name: Build and push hook listener service
         id: docker_build_hook_listener
@@ -65,9 +65,13 @@ jobs:
           push: true
           tags: jerrinot/turbine-demo-hook-listener:latest
           cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          cache-to: type=local,dest=/tmp/.buildx-cache-hook
 
       - name: Move cache
         run: |
           rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          cp -rn /tmp/.buildx-cache-ping/* /tmp/.buildx-cache-hook/
+          rm -rf /tmp/.buildx-cache-ping
+          cp -rn /tmp/.buildx-cache-pong/* /tmp/.buildx-cache-hook/
+          rm -rf /tmp/.buildx-cache-pong
+          mv /tmp/.buildx-cache-hook /tmp/.buildx-cache
