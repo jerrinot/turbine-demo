@@ -34,6 +34,8 @@ jobs:
           file: ./services/ping-pong/ping/Dockerfile
           push: true
           tags: jerrinot/turbine-demo-ping:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build and push pong service, test
         id: docker_build_pong
@@ -43,6 +45,8 @@ jobs:
           file: ./services/ping-pong/pong/Dockerfile
           push: true
           tags: jerrinot/turbine-demo-pong:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build and push hook listener service
         id: docker_build_hook_listener
@@ -52,3 +56,5 @@ jobs:
           file: ./hook-listener/Dockerfile
           push: true
           tags: jerrinot/turbine-demo-hook-listener:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
