@@ -1,0 +1,57 @@
+
+name: RUN CI
+on:
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - 'docs/**/*.md'
+      - '**/README.md'
+
+  workflow_dispatch:
+jobs:
+  build:
+    name: hook-listener CI pipeline
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [1.16.x]
+
+    steps:
+      - uses: actions/checkout@v2.3.4
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{matrix.go-version}}
+
+      - name: Cache go modules
+        id: cache-go
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      # - name: Install golint
+      #  run: go get -u golang.org/x/lint/golint
+
+      # - name: Run linters
+      #   run: |
+      #    cd hook-listener
+      #    go vet ./...
+      #    golint -set_exit_status=1 ./...
+
+      - name: Fetch require Go modules
+        if: steps.cache-go.outputs.cache-hit != 'true'
+        working-directory: ./hook-listener
+        run: go mod download
+
+      - name: Build hook-listener
+        working-directory: ./hook-listener
+        run:  go build -v ./...
+
+      - name: Apply test to hook-listeners
+        working-directory: ./hook-listener
+        id: functional-test
+        run: go test -v ./...
