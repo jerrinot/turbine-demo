@@ -1,30 +1,26 @@
-name: Docker
 
+name: Docker
 on:
   push:
+    branches: [master]
     paths-ignore:
-      - '**.md'
+      - 'docs/**/*.md'
+      - '**/README.md'
     tags:
       - "*.*.*"
-    branches: [ master ]
+
   workflow_dispatch:
 
 jobs:
   push_to_registry:
-    name: Push Docker images to Docker Hub
+    name: Push images to registry
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
     steps:
-      - name: Login to Docker Hub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v2
 
       - name: Set up Docker Buildx
@@ -34,10 +30,19 @@ jobs:
       - name: Cache Docker layers
         uses: actions/cache@v2
         with:
-          path: /tmp/.buildx-cache
+          path: | 
+            /tmp/.buildx-cache/hook-listener
+            /tmp/.buildx-cache/ping
+            /tmp/.buildx-cache/pong
           key: ${{ runner.os }}-buildx-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-buildx-
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
             
       - name: Build and push ping service
         id: docker_build_and_push_ping
@@ -48,10 +53,10 @@ jobs:
           builder: ${{ steps.buildx.outputs.name }}
           push: true
           tags: jerrinot/turbine-demo-ping:latest
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
+          cache-from: type=local,src=/tmp/.buildx-cache/ping
+          cache-to: type=local,dest=/tmp/.buildx-cache/ping-new,mode=max
 
-      - name: Build and push pong service, test
+      - name: Build and push pong service
         id: docker_build_and_push_pong
         uses: docker/build-push-action@v2
         with:
@@ -60,8 +65,8 @@ jobs:
           builder: ${{ steps.buildx.outputs.name }}
           push: true
           tags: jerrinot/turbine-demo-pong:latest
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
+          cache-from: type=local,src=/tmp/.buildx-cache/pong
+          cache-to: type=local,dest=/tmp/.buildx-cache/pong-new,mode=max
 
       - name: Build and push hook listener service
         id: docker_build_and_push_hook_listener
@@ -72,5 +77,14 @@ jobs:
           builder: ${{ steps.buildx.outputs.name }}
           push: true
           tags: jerrinot/turbine-demo-hook-listener:latest
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
+          cache-from: type=local,src=/tmp/.buildx-cache/hook-listener
+          cache-to: type=local,dest=/tmp/.buildx-cache-/hook-listener-new,mode=max
+
+      - name: Move caches
+        run: |
+          rm -rf /tmp/.buildx-cache/ping
+          mv /tmp/.buildx-cache/ping-new /tmp/.buildx-cache/ping
+          rm -rf /tmp/.buildx-cache/pong
+          mv /tmp/.buildx-cache/pong-new /tmp/.buildx-cache/pong
+          rm -rf /tmp/.buildx-cache/hook-listener
+          mv /tmp/.buildx-cache-/hook-listener-new /tmp/.buildx-cache/hook-listener
