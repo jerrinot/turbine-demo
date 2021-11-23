@@ -39,14 +39,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Install golint
-        run: go get -u golang.org/x/lint/golint
+      # - name: Install golint
+      #  run: go get -u golang.org/x/lint/golint
 
-      - name: Run linters
-        run: |
-          cd hook-listener
-          go vet ./...
-          golint -set_exit_status=1 ./...
+      # - name: Run linters
+      #   run: |
+      #    cd hook-listener
+      #    go vet ./...
+      #    golint -set_exit_status=1 ./...
 
       - name: Fetch require Go modules
         if: steps.cache-go.outputs.cache-hit != 'true'
