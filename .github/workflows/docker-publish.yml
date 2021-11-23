@@ -31,9 +31,25 @@ jobs:
         uses: actions/cache@v2
         with:
           path: | 
-            /tmp/.buildx-cache/hook-listener
             /tmp/.buildx-cache/ping
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: | 
             /tmp/.buildx-cache/pong
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: | 
+            /tmp/.buildx-cache/hook-listener
           key: ${{ runner.os }}-buildx-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-buildx-
