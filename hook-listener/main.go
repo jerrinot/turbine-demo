@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -10,9 +11,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	v12 "k8s.io/client-go/kubernetes/typed/core/v1"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 	"k8s.io/client-go/util/retry"
 	"net/http"
+	"path/filepath"
 	"time"
 )
 
@@ -125,6 +130,9 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 				return
 			}
 		}
+	//case "GET":
+	//deployments, err := deploymentClient.List(context.TODO(),  metav1.ListOptions{})
+
 	default:
 		http.Error(w, "Unsupported HTTP method, this is POST-only", http.StatusBadRequest)
 	}
@@ -254,8 +262,27 @@ func handleGithubRequest(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("I just received a request from Github action")
 }
 
+func createK8sConfig() (*rest.Config, error) {
+	var kubeconfig *string
+	var remote *bool
+	remote = flag.Bool("remote", false, "connect to a remote cluster")
+
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	}
+	flag.Parse()
+
+	if *remote {
+		return clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	} else {
+		return rest.InClusterConfig()
+	}
+}
+
 func createClients(namespace string) (v1.DeploymentInterface, v12.ServiceInterface) {
-	config, err := rest.InClusterConfig()
+	config, err := createK8sConfig()
 	if err != nil {
 		panic(err.Error())
 	}
