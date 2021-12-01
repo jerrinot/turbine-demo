@@ -99,7 +99,6 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 }
 
 func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
-	fmt.Println("I just received a request to deploy a new service")
 	switch req.Method {
 	case "POST":
 		var applicationDescriptor TurbineService
@@ -130,9 +129,29 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 				return
 			}
 		}
-	//case "GET":
-	//deployments, err := deploymentClient.List(context.TODO(),  metav1.ListOptions{})
-
+	case "GET":
+		deployments, err := deploymentClient.List(context.TODO(), metav1.ListOptions{})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		var allTurbineApps []TurbineService
+		for _, deployment := range deployments.Items {
+			if isTurbineApp(deployment) {
+				turbineApp := TurbineService{
+					Name:     deployment.Name,
+					Image:    deployment.Spec.Template.Spec.Containers[0].Image,
+					Port:     0, //todo
+					Replicas: *deployment.Spec.Replicas,
+					Expose:   false, //todo
+				}
+				allTurbineApps = append(allTurbineApps, turbineApp)
+			}
+		}
+		err = json.NewEncoder(w).Encode(allTurbineApps)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
 	default:
 		http.Error(w, "Unsupported HTTP method, this is POST-only", http.StatusBadRequest)
 	}
