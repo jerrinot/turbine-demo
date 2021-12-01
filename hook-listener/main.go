@@ -107,7 +107,7 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 		fmt.Printf("Request to deploy a new application: %s\n", applicationDescriptor)
 		_, err := deploymentClient.Get(context.TODO(), applicationDescriptor.Name, metav1.GetOptions{})
 		if err == nil {
-			http.Error(w, "Deployment already exist", http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("Application %s already exist", applicationDescriptor.Name), http.StatusConflict)
 			return
 		}
 		deployment := constructDeploymentDescriptor(applicationDescriptor)

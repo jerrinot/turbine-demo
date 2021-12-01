@@ -35,3 +35,4 @@ spec:
       protocol: TCP
   selector:
     app: hook-listener-service
+  loadBalancerIP: "34.116.186.174"
