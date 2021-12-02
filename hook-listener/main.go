@@ -31,6 +31,7 @@ type TurbineService struct {
 	Port     int32  `json:"port"`
 	Replicas int32  `json:"replicas"`
 	Expose   bool   `json:"expose"`
+	IP       string `json:"ip"`
 }
 
 func (c TurbineService) String() string {
@@ -161,6 +162,7 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
+
 		}
 	case "GET":
 		deployments, err := deploymentClient.List(context.TODO(), metav1.ListOptions{})
@@ -179,12 +181,23 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 				if err != nil {
 					exposed = false
 				}
+				var ip = ""
+				if exposed {
+					service, _ := serviceClient.Get(context.TODO(), deployment.Name, metav1.GetOptions{})
+					if service != nil {
+						ingress := service.Status.LoadBalancer.Ingress
+						if len(ingress) != 0 {
+							ip = ingress[0].IP
+						}
+					}
+				}
 				turbineApp := TurbineService{
 					Name:     deployment.Name,
 					Image:    deployment.Spec.Template.Spec.Containers[0].Image,
 					Port:     int32(port),
 					Replicas: *deployment.Spec.Replicas,
 					Expose:   exposed,
+					IP:       ip,
 				}
 				allTurbineApps = append(allTurbineApps, turbineApp)
 			}
