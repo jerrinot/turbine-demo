@@ -17,7 +17,9 @@ import (
 	"k8s.io/client-go/util/homedir"
 	"k8s.io/client-go/util/retry"
 	"net/http"
+	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -281,10 +283,18 @@ func handleGithubRequest(w http.ResponseWriter, req *http.Request) {
 	fmt.Println("I just received a request from Github action")
 }
 
+func lookupEnvOrBoolean(key string, defaultVal bool) bool {
+	if val, ok := os.LookupEnv(key); ok {
+		ret, err := strconv.ParseBool(val)
+		return err == nil && ret
+	}
+	return defaultVal
+}
+
 func createK8sConfig() (*rest.Config, error) {
 	var kubeconfig *string
 	var remote *bool
-	remote = flag.Bool("remote", false, "connect to a remote cluster")
+	remote = flag.Bool("remote", lookupEnvOrBoolean("remote", false), "connect to a remote cluster")
 
 	if home := homedir.HomeDir(); home != "" {
 		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
