@@ -193,8 +193,6 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
-	case "DELETE":
-
 	default:
 		http.Error(w, "Unsupported HTTP method", http.StatusBadRequest)
 	}
