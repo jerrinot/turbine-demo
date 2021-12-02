@@ -102,6 +102,35 @@ func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
 	fmt.Printf("There are %d deployments in the cluster\n", len(deployments.Items))
 }
 
+func handleDeploymentDeleteRequest(w http.ResponseWriter, req *http.Request) {
+	pathParams := mux.Vars(req)
+	applicationName := pathParams["application"]
+	fmt.Printf("Handling delete %s request\n", applicationName)
+
+	deployment, err := deploymentClient.Get(context.TODO(), applicationName, metav1.GetOptions{})
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Application %s not found", applicationName), http.StatusNotFound)
+		return
+	}
+	if !isTurbineApp(*deployment) {
+		http.Error(w, fmt.Sprintf("Application %s is not a Turbine-application", applicationName), http.StatusBadRequest)
+		return
+	}
+
+	serviceShouldExist := readAnnotation(*deployment, "turbine/exposed", "false")
+	if deploymentClient.Delete(context.TODO(), applicationName, metav1.DeleteOptions{}) != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if serviceShouldExist == "true" {
+		if serviceClient.Delete(context.TODO(), applicationName, metav1.DeleteOptions{}) != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case "POST":
@@ -362,6 +391,7 @@ func main() {
 	r.HandleFunc("/webhook", handleHookRequest)
 	r.HandleFunc("/k8s", handleKubernetesRequest)
 	r.HandleFunc("/gh-action", handleGithubRequest)
-	r.HandleFunc("/deployment", handleDeploymentRequest)
+	r.HandleFunc("/deployment", handleDeploymentRequest).Methods(http.MethodGet, http.MethodPost)
+	r.HandleFunc("/deployment/{application}", handleDeploymentDeleteRequest).Methods(http.MethodDelete)
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
