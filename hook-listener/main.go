@@ -291,16 +291,25 @@ func lookupEnvOrBoolean(key string, defaultVal bool) bool {
 	return defaultVal
 }
 
+func lookupEnvOrString(key string, defaultVal string) string {
+	if val, ok := os.LookupEnv(key); ok {
+		return val
+	}
+	return defaultVal
+}
+
 func createK8sConfig() (*rest.Config, error) {
 	var kubeconfig *string
 	var remote *bool
 	remote = flag.Bool("remote", lookupEnvOrBoolean("remote", false), "connect to a remote cluster")
 
+	var defaultKubeConfigPath string
 	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+		defaultKubeConfigPath = lookupEnvOrString("kubeconfig", filepath.Join(home, ".kube", "config"))
 	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+		defaultKubeConfigPath = lookupEnvOrString("kubeconfig", "")
 	}
+	kubeconfig = flag.String("kubeconfig", defaultKubeConfigPath, "absolute path to the kubeconfig file")
 	flag.Parse()
 
 	if *remote {
