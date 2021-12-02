@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/gorilla/mux"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,6 +17,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 	"k8s.io/client-go/util/retry"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -162,8 +164,10 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
+	case "DELETE":
+
 	default:
-		http.Error(w, "Unsupported HTTP method, this is POST-only", http.StatusBadRequest)
+		http.Error(w, "Unsupported HTTP method", http.StatusBadRequest)
 	}
 }
 
@@ -354,10 +358,10 @@ func int32Ptr(i int32) *int32 { return &i }
 
 func main() {
 	deploymentClient, serviceClient = createClients("default")
-
-	http.HandleFunc("/webhook", handleHookRequest)
-	http.HandleFunc("/k8s", handleKubernetesRequest)
-	http.HandleFunc("/gh-action", handleGithubRequest)
-	http.HandleFunc("/deployment", handleDeploymentRequest)
-	http.ListenAndServe(":8080", nil)
+	r := mux.NewRouter()
+	r.HandleFunc("/webhook", handleHookRequest)
+	r.HandleFunc("/k8s", handleKubernetesRequest)
+	r.HandleFunc("/gh-action", handleGithubRequest)
+	r.HandleFunc("/deployment", handleDeploymentRequest)
+	log.Fatal(http.ListenAndServe(":8080", r))
 }
