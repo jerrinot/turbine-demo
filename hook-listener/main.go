@@ -140,12 +140,20 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 		var allTurbineApps []TurbineService
 		for _, deployment := range deployments.Items {
 			if isTurbineApp(deployment) {
+				port, err := strconv.Atoi(readAnnotation(deployment, "turbine/port", "0"))
+				if err != nil {
+					port = 0
+				}
+				exposed, err := strconv.ParseBool(readAnnotation(deployment, "turbine/exposed", "false"))
+				if err != nil {
+					exposed = false
+				}
 				turbineApp := TurbineService{
 					Name:     deployment.Name,
 					Image:    deployment.Spec.Template.Spec.Containers[0].Image,
-					Port:     0, //todo
+					Port:     int32(port),
 					Replicas: *deployment.Spec.Replicas,
-					Expose:   false, //todo
+					Expose:   exposed,
 				}
 				allTurbineApps = append(allTurbineApps, turbineApp)
 			}
@@ -160,8 +168,14 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 }
 
 func isTurbineApp(deployment appsv1.Deployment) bool {
-	val, ok := deployment.Spec.Template.Annotations["turbine/enabled"]
-	return ok && "true" == val
+	return readAnnotation(deployment, "turbine/enabled", "false") == "true"
+}
+
+func readAnnotation(deployment appsv1.Deployment, annotation string, def string) string {
+	if val, ok := deployment.Spec.Template.Annotations[annotation]; ok {
+		return val
+	}
+	return def
 }
 
 func containsContainer(deployment appsv1.Deployment, containerName string) bool {
@@ -234,6 +248,8 @@ func constructDeploymentDescriptor(applicationDescriptor TurbineService) *appsv1
 					Annotations: map[string]string{
 						"turbine/configmap": "turbine-sidecar-config",
 						"turbine/enabled":   "true",
+						"turbine/exposed":   strconv.FormatBool(applicationDescriptor.Expose),
+						"turbine/port":      strconv.Itoa(int(applicationDescriptor.Port)),
 					},
 				},
 				Spec: apiv1.PodSpec{
