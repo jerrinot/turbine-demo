@@ -57,8 +57,16 @@ type DockerHubEvent struct {
 	PushedData  PushedData `json:"push_data"`
 }
 
-var deploymentClient v1.DeploymentInterface
-var serviceClient v12.ServiceInterface
+type ClientResources struct {
+	DeploymentClient v1.DeploymentInterface
+	ServiceClient    v12.ServiceInterface
+	PodClient        v12.PodInterface
+	NodeClient       v12.NodeInterface
+}
+
+var (
+	clusterResources *ClientResources
+)
 
 func handleHookRequest(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
@@ -68,14 +76,14 @@ func handleHookRequest(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		deployments, err := deploymentClient.List(context.TODO(), metav1.ListOptions{})
+		deployments, err := clusterResources.DeploymentClient.List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		for _, deployment := range deployments.Items {
 			if isTurbineApp(deployment) && containsContainer(deployment, event.Repository.RepoName) {
-				err := restartDeployment(deployment.Name, deploymentClient)
+				err := restartDeployment(deployment.Name, clusterResources.DeploymentClient)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusBadRequest)
 					return
@@ -88,13 +96,13 @@ func handleHookRequest(w http.ResponseWriter, req *http.Request) {
 }
 
 func handleKubernetesRequest(w http.ResponseWriter, req *http.Request) {
-	deployments, err := deploymentClient.List(context.TODO(), metav1.ListOptions{})
+	deployments, err := clusterResources.DeploymentClient.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		panic(err.Error())
 	}
 	for _, deployment := range deployments.Items {
 		if isTurbineApp(deployment) {
-			err := restartDeployment(deployment.Name, deploymentClient)
+			err := restartDeployment(deployment.Name, clusterResources.DeploymentClient)
 			if err != nil {
 				panic(err.Error())
 			}
@@ -108,7 +116,7 @@ func handleDeploymentDeleteRequest(w http.ResponseWriter, req *http.Request) {
 	applicationName := pathParams["application"]
 	fmt.Printf("Handling delete %s request\n", applicationName)
 
-	deployment, err := deploymentClient.Get(context.TODO(), applicationName, metav1.GetOptions{})
+	deployment, err := clusterResources.DeploymentClient.Get(context.TODO(), applicationName, metav1.GetOptions{})
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Application %s not found", applicationName), http.StatusNotFound)
 		return
@@ -119,12 +127,12 @@ func handleDeploymentDeleteRequest(w http.ResponseWriter, req *http.Request) {
 	}
 
 	serviceShouldExist := readAnnotation(*deployment, "turbine/exposed", "false")
-	if deploymentClient.Delete(context.TODO(), applicationName, metav1.DeleteOptions{}) != nil {
+	if clusterResources.DeploymentClient.Delete(context.TODO(), applicationName, metav1.DeleteOptions{}) != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if serviceShouldExist == "true" {
-		if serviceClient.Delete(context.TODO(), applicationName, metav1.DeleteOptions{}) != nil {
+		if clusterResources.ServiceClient.Delete(context.TODO(), applicationName, metav1.DeleteOptions{}) != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -143,13 +151,13 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		fmt.Printf("Request to deploy a new application: %s\n", applicationDescriptor)
-		_, err := deploymentClient.Get(context.TODO(), applicationDescriptor.Name, metav1.GetOptions{})
+		_, err := clusterResources.DeploymentClient.Get(context.TODO(), applicationDescriptor.Name, metav1.GetOptions{})
 		if err == nil {
 			http.Error(w, fmt.Sprintf("Application %s already exist", applicationDescriptor.Name), http.StatusConflict)
 			return
 		}
 		deployment := constructDeploymentDescriptor(applicationDescriptor)
-		deployment, err = deploymentClient.Create(context.TODO(), deployment, metav1.CreateOptions{})
+		deployment, err = clusterResources.DeploymentClient.Create(context.TODO(), deployment, metav1.CreateOptions{})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -157,7 +165,7 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 
 		if applicationDescriptor.Expose {
 			service := constructServiceDescriptor(applicationDescriptor)
-			_, err := serviceClient.Create(context.TODO(), service, metav1.CreateOptions{})
+			_, err := clusterResources.ServiceClient.Create(context.TODO(), service, metav1.CreateOptions{})
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
@@ -165,7 +173,7 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 
 		}
 	case "GET":
-		deployments, err := deploymentClient.List(context.TODO(), metav1.ListOptions{})
+		deployments, err := clusterResources.DeploymentClient.List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -183,7 +191,7 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 				}
 				var ip = ""
 				if exposed {
-					service, _ := serviceClient.Get(context.TODO(), deployment.Name, metav1.GetOptions{})
+					service, _ := clusterResources.ServiceClient.Get(context.TODO(), deployment.Name, metav1.GetOptions{})
 					if service != nil {
 						ingress := service.Status.LoadBalancer.Ingress
 						if len(ingress) != 0 {
@@ -379,7 +387,7 @@ func createK8sConfig() (*rest.Config, error) {
 	}
 }
 
-func createClients(namespace string) (v1.DeploymentInterface, v12.ServiceInterface) {
+func createClients(namespace string) *ClientResources {
 	config, err := createK8sConfig()
 	if err != nil {
 		panic(err.Error())
@@ -388,21 +396,34 @@ func createClients(namespace string) (v1.DeploymentInterface, v12.ServiceInterfa
 	if err != nil {
 		panic(err.Error())
 	}
-	deploymentClient := clientset.AppsV1().Deployments(namespace)
-	serviceClient := clientset.CoreV1().Services(namespace)
 
-	return deploymentClient, serviceClient
+	clusterResources = &ClientResources{
+		DeploymentClient: clientset.AppsV1().Deployments(namespace),
+		ServiceClient:    clientset.CoreV1().Services(namespace),
+		PodClient:        clientset.CoreV1().Pods(namespace),
+		NodeClient:       clientset.CoreV1().Nodes(),
+	}
+	return clusterResources
+}
+
+func handleClusterPropertyRequest(w http.ResponseWriter, req *http.Request) {
+	// print cluster properties to stdout
+	clusterPropertiesToStdout(clusterResources)
 }
 
 func int32Ptr(i int32) *int32 { return &i }
 
 func main() {
-	deploymentClient, serviceClient = createClients("default")
+	clusterResources = createClients("default")
 	r := mux.NewRouter()
 	r.HandleFunc("/webhook", handleHookRequest)
 	r.HandleFunc("/k8s", handleKubernetesRequest)
 	r.HandleFunc("/gh-action", handleGithubRequest)
 	r.HandleFunc("/deployment", handleDeploymentRequest).Methods(http.MethodGet, http.MethodPost)
 	r.HandleFunc("/deployment/{application}", handleDeploymentDeleteRequest).Methods(http.MethodDelete)
+
+	// cluster properties
+	r.HandleFunc("/", handleClusterPropertyRequest)
+
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
