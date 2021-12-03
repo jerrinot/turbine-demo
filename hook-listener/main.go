@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -82,7 +83,7 @@ func handleHookRequest(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		for _, deployment := range deployments.Items {
-			if isTurbineApp(deployment) && containsContainer(deployment, event.Repository.RepoName) {
+			if isTurbineApp(deployment) && containsContainer(deployment, event.Repository.RepoName, event.PushedData.Tag) {
 				err := restartDeployment(deployment.Name, clusterResources.DeploymentClient)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusBadRequest)
@@ -220,7 +221,8 @@ func handleDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 }
 
 func isTurbineApp(deployment appsv1.Deployment) bool {
-	return readAnnotation(deployment, "turbine/enabled", "false") == "true"
+	annotation := readAnnotation(deployment, "turbine/enabled", "false")
+	return annotation == "true"
 }
 
 func readAnnotation(deployment appsv1.Deployment, annotation string, def string) string {
@@ -230,9 +232,15 @@ func readAnnotation(deployment appsv1.Deployment, annotation string, def string)
 	return def
 }
 
-func containsContainer(deployment appsv1.Deployment, containerName string) bool {
+func containsContainer(deployment appsv1.Deployment, containerName string, tag string) bool {
 	for _, container := range deployment.Spec.Template.Spec.Containers {
-		if container.Image == containerName {
+		nameAndTag := strings.Split(container.Image, ":")
+		deploymentName := nameAndTag[0]
+		deploymentTag := "latest"
+		if len(nameAndTag) == 2 {
+			deploymentTag = nameAndTag[1]
+		}
+		if deploymentName == containerName && deploymentTag == tag {
 			return true
 		}
 	}
