@@ -197,3 +197,8 @@ func createClients(namespace string) *ClientResources {
 	}
 	return clusterResources
 }
+
+func isTurbineApp(deployment appsv1.Deployment) bool {
+	annotation := readAnnotation(deployment, "turbine/enabled", "false")
+	return annotation == "true"
+}

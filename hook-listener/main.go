@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"github.com/gorilla/mux"
-	appsv1 "k8s.io/api/apps/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"log"
 	"net/http"
@@ -27,25 +26,12 @@ var (
 	clusterResources *ClientResources
 )
 
-func isTurbineApp(deployment appsv1.Deployment) bool {
-	annotation := readAnnotation(deployment, "turbine/enabled", "false")
-	return annotation == "true"
-}
-
-func handleClusterPropertyRequest(w http.ResponseWriter, req *http.Request) {
-	// print cluster properties to stdout
-	clusterPropertiesToStdout(clusterResources)
-}
-
 func main() {
 	clusterResources = createClients("default")
 	r := mux.NewRouter()
-	r.HandleFunc("/webhook", handleHookRequest).Methods(http.MethodPost)
-	r.HandleFunc("/deployment", handleDeploymentRequest).Methods(http.MethodGet, http.MethodPost)
+	r.HandleFunc("/webhook", handleDockerHubHookRequest).Methods(http.MethodPost)
+	r.HandleFunc("/deployment", handleListDeploymentRequest).Methods(http.MethodGet)
+	r.HandleFunc("/deployment", handleNewDeploymentRequest).Methods(http.MethodPost)
 	r.HandleFunc("/deployment/{application}", handleDeploymentDeleteRequest).Methods(http.MethodDelete)
-
-	// cluster properties
-	r.HandleFunc("/", handleClusterPropertyRequest).Methods(http.MethodGet)
-
 	log.Fatal(http.ListenAndServe(":8080", r))
 }

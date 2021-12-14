@@ -25,7 +25,7 @@ type PushedData struct {
 	PushedAt uint64 `json:"pushed_at"`
 }
 
-func handleHookRequest(w http.ResponseWriter, req *http.Request) {
+func handleDockerHubHookRequest(w http.ResponseWriter, req *http.Request) {
 	var event DockerHubEvent
 	if err := json.NewDecoder(req.Body).Decode(&event); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
