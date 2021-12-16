@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 )
@@ -25,11 +24,11 @@ type PushedData struct {
 }
 
 type DockerHubController struct {
-	controller *KubernetesController
+	proxy *KubernetesProxy
 }
 
-func NewDockerHubController(kubernetesController *KubernetesController) *DockerHubController {
-	return &DockerHubController{controller: kubernetesController}
+func NewDockerHubController(proxy *KubernetesProxy) *DockerHubController {
+	return &DockerHubController{proxy: proxy}
 }
 
 func (handler DockerHubController) HandleDockerHubHookRequest(w http.ResponseWriter, req *http.Request) {
@@ -38,14 +37,14 @@ func (handler DockerHubController) HandleDockerHubHookRequest(w http.ResponseWri
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	deployments, err := handler.controller.listDeployment(context.TODO())
+	deployments, err := handler.proxy.listDeployment(req.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	for _, deployment := range deployments.Items {
 		if isTurbineApp(deployment) && containsContainer(deployment, event.Repository.RepoName, event.PushedData.Tag) {
-			err := handler.controller.restartDeployment(deployment.Name)
+			err := handler.proxy.restartDeployment(req.Context(), deployment.Name)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return

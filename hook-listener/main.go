@@ -9,9 +9,9 @@ import (
 )
 
 func main() {
-	controller := internal.NewKubernetesController("default")
-	deployment := internal.NewDeployment(controller)
-	hubController := internal.NewDockerHubController(controller)
+	k8sProxy := internal.NewKubernetesProxy("default")
+	deployment := internal.NewDeploymentController(k8sProxy)
+	hubController := internal.NewDockerHubController(k8sProxy)
 
 	r := mux.NewRouter()
 	r.HandleFunc("/webhook", hubController.HandleDockerHubHookRequest).Methods(http.MethodPost)

@@ -7,34 +7,34 @@ import (
 	"net/http"
 )
 
-type Deployments struct {
-	kubernetesController *KubernetesController
+type DeploymentController struct {
+	kubernetesProxy *KubernetesProxy
 }
 
-func NewDeployment(controller *KubernetesController) *Deployments {
-	return &Deployments{kubernetesController: controller}
+func NewDeploymentController(proxy *KubernetesProxy) *DeploymentController {
+	return &DeploymentController{kubernetesProxy: proxy}
 }
 
-func (deployments *Deployments) HandleNewDeploymentRequest(w http.ResponseWriter, req *http.Request) {
+func (deployments *DeploymentController) HandleNewDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 	var applicationDescriptor turbineService
 	if err := json.NewDecoder(req.Body).Decode(&applicationDescriptor); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	fmt.Printf("Request to deploy a new application: %s\n", applicationDescriptor)
-	if deployments.kubernetesController.containsDeployment(applicationDescriptor.Name) {
+	if deployments.kubernetesProxy.containsDeployment(req.Context(), applicationDescriptor.Name) {
 		http.Error(w, fmt.Sprintf("Application %s already exist", applicationDescriptor.Name), http.StatusConflict)
 		return
 	}
 
-	err := deployments.kubernetesController.newDeployment(applicationDescriptor)
+	err := deployments.kubernetesProxy.newDeployment(req.Context(), applicationDescriptor)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if applicationDescriptor.Expose {
-		err := deployments.kubernetesController.exposeService(applicationDescriptor)
+		err := deployments.kubernetesProxy.exposeService(req.Context(), applicationDescriptor)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -42,8 +42,8 @@ func (deployments *Deployments) HandleNewDeploymentRequest(w http.ResponseWriter
 	}
 }
 
-func (deployments *Deployments) HandleListDeploymentRequest(w http.ResponseWriter, req *http.Request) {
-	turbineApps, err := deployments.kubernetesController.getAllApps()
+func (deployments *DeploymentController) HandleListDeploymentRequest(w http.ResponseWriter, req *http.Request) {
+	turbineApps, err := deployments.kubernetesProxy.getAllApps(req.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
@@ -53,11 +53,11 @@ func (deployments *Deployments) HandleListDeploymentRequest(w http.ResponseWrite
 	}
 }
 
-func (deployments *Deployments) HandleDeploymentDeleteRequest(w http.ResponseWriter, req *http.Request) {
+func (deployments *DeploymentController) HandleDeploymentDeleteRequest(w http.ResponseWriter, req *http.Request) {
 	pathParams := mux.Vars(req)
 	applicationName := pathParams["application"]
 	fmt.Printf("Handling delete %s request\n", applicationName)
-	if err := deployments.kubernetesController.deleteApplication(applicationName); err != nil {
+	if err := deployments.kubernetesProxy.deleteApplication(req.Context(), applicationName); err != nil {
 		w.Header()
 	}
 	w.WriteHeader(http.StatusOK)
