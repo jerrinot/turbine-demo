@@ -5,20 +5,20 @@ import (
 	"net/http"
 )
 
-type DockerHubEvent struct {
+type dockerHubEvent struct {
 	CallbackUrl string     `json:"callback_url"`
-	Repository  Repository `json:"repository"`
-	PushedData  PushedData `json:"push_data"`
+	Repository  repository `json:"repository"`
+	PushedData  pushedData `json:"push_data"`
 }
 
-type Repository struct {
+type repository struct {
 	RepoName  string `json:"repo_name"`
 	RepoUrl   string `json:"repo_url"`
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 }
 
-type PushedData struct {
+type pushedData struct {
 	Tag      string `json:"tag"`
 	PushedAt uint64 `json:"pushed_at"`
 }
@@ -32,7 +32,7 @@ func NewDockerHubController(proxy *KubernetesProxy) *DockerHubController {
 }
 
 func (handler DockerHubController) HandleDockerHubHookRequest(w http.ResponseWriter, req *http.Request) {
-	var event DockerHubEvent
+	var event dockerHubEvent
 	if err := json.NewDecoder(req.Body).Decode(&event); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

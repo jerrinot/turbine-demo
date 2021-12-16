@@ -58,7 +58,8 @@ func (deployments *DeploymentController) HandleDeploymentDeleteRequest(w http.Re
 	applicationName := pathParams["application"]
 	fmt.Printf("Handling delete %s request\n", applicationName)
 	if err := deployments.kubernetesProxy.deleteApplication(req.Context(), applicationName); err != nil {
-		w.Header()
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
