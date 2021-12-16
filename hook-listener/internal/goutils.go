@@ -1,11 +1,11 @@
-package main
+package internal
 
 import (
 	"os"
 	"strconv"
 )
 
-func lookupEnvOrBoolean(key string, defaultVal bool) bool {
+func LookupEnvOrBoolean(key string, defaultVal bool) bool {
 	if val, ok := os.LookupEnv(key); ok {
 		ret, err := strconv.ParseBool(val)
 		return err == nil && ret
@@ -13,11 +13,11 @@ func lookupEnvOrBoolean(key string, defaultVal bool) bool {
 	return defaultVal
 }
 
-func lookupEnvOrString(key string, defaultVal string) string {
+func LookupEnvOrString(key string, defaultVal string) string {
 	if val, ok := os.LookupEnv(key); ok {
 		return val
 	}
 	return defaultVal
 }
 
-func int32Ptr(i int32) *int32 { return &i }
+func Int32Ptr(i int32) *int32 { return &i }

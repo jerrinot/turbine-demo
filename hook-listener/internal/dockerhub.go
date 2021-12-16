@@ -1,9 +1,8 @@
-package main
+package internal
 
 import (
 	"context"
 	"encoding/json"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"net/http"
 )
 
@@ -25,13 +24,13 @@ type PushedData struct {
 	PushedAt uint64 `json:"pushed_at"`
 }
 
-func handleDockerHubHookRequest(w http.ResponseWriter, req *http.Request) {
+func HandleDockerHubHookRequest(w http.ResponseWriter, req *http.Request) {
 	var event DockerHubEvent
 	if err := json.NewDecoder(req.Body).Decode(&event); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	deployments, err := clusterResources.DeploymentClient.List(context.TODO(), metav1.ListOptions{})
+	deployments, err := listDeployment(context.TODO())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

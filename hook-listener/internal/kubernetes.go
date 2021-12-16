@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"context"
@@ -20,12 +20,30 @@ import (
 	"time"
 )
 
-type ClientResources struct {
+type turbineService struct {
+	Name     string `json:"name"`
+	Image    string `json:"image"`
+	Port     int32  `json:"port"`
+	Replicas int32  `json:"replicas"`
+	Expose   bool   `json:"expose"`
+	IP       string `json:"ip"`
+}
+
+func (c turbineService) String() string {
+	return fmt.Sprintf("Name: %s, Image: %s, Port: %d, Replicas: %d, Expose: %t", c.Name,
+		c.Image, c.Port, c.Replicas, c.Expose)
+}
+
+type clientResources struct {
 	DeploymentClient v1.DeploymentInterface
 	ServiceClient    v12.ServiceInterface
 	PodClient        v12.PodInterface
 	NodeClient       v12.NodeInterface
 }
+
+var (
+	clusterResources *clientResources
+)
 
 func readAnnotation(deployment appsv1.Deployment, annotation string, defaultValue string) string {
 	if val, ok := deployment.Spec.Template.Annotations[annotation]; ok {
@@ -49,7 +67,7 @@ func restartDeployment(deploymentName string, deploymentClient v1.DeploymentInte
 	})
 }
 
-func constructServiceDescriptor(applicationDescriptor TurbineService) *apiv1.Service {
+func constructServiceDescriptor(applicationDescriptor turbineService) *apiv1.Service {
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: applicationDescriptor.Name,
@@ -73,7 +91,7 @@ func constructServiceDescriptor(applicationDescriptor TurbineService) *apiv1.Ser
 	return service
 }
 
-func constructDeploymentDescriptor(applicationDescriptor TurbineService) *appsv1.Deployment {
+func constructDeploymentDescriptor(applicationDescriptor turbineService) *appsv1.Deployment {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: applicationDescriptor.Name,
@@ -82,7 +100,7 @@ func constructDeploymentDescriptor(applicationDescriptor TurbineService) *appsv1
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: int32Ptr(applicationDescriptor.Replicas),
+			Replicas: Int32Ptr(applicationDescriptor.Replicas),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": applicationDescriptor.Name,
@@ -161,13 +179,13 @@ func containsContainer(deployment appsv1.Deployment, imageName string, tag strin
 func createK8sConfig() (*rest.Config, error) {
 	var kubeconfig *string
 	var remote *bool
-	remote = flag.Bool("remote", lookupEnvOrBoolean("remote", false), "connect to a remote cluster")
+	remote = flag.Bool("remote", LookupEnvOrBoolean("remote", false), "connect to a remote cluster")
 
 	var defaultKubeConfigPath string
 	if home := homedir.HomeDir(); home != "" {
-		defaultKubeConfigPath = lookupEnvOrString("kubeconfig", filepath.Join(home, ".kube", "config"))
+		defaultKubeConfigPath = LookupEnvOrString("kubeconfig", filepath.Join(home, ".kube", "config"))
 	} else {
-		defaultKubeConfigPath = lookupEnvOrString("kubeconfig", "")
+		defaultKubeConfigPath = LookupEnvOrString("kubeconfig", "")
 	}
 	kubeconfig = flag.String("kubeconfig", defaultKubeConfigPath, "absolute path to the kubeconfig file")
 	flag.Parse()
@@ -179,7 +197,11 @@ func createK8sConfig() (*rest.Config, error) {
 	}
 }
 
-func createClients(namespace string) *ClientResources {
+func listDeployment(ctx context.Context) (*appsv1.DeploymentList, error) {
+	return clusterResources.DeploymentClient.List(ctx, metav1.ListOptions{})
+}
+
+func CreateClients(namespace string) {
 	config, err := createK8sConfig()
 	if err != nil {
 		panic(err.Error())
@@ -189,13 +211,12 @@ func createClients(namespace string) *ClientResources {
 		panic(err.Error())
 	}
 
-	clusterResources = &ClientResources{
+	clusterResources = &clientResources{
 		DeploymentClient: clientset.AppsV1().Deployments(namespace),
 		ServiceClient:    clientset.CoreV1().Services(namespace),
 		PodClient:        clientset.CoreV1().Pods(namespace),
 		NodeClient:       clientset.CoreV1().Nodes(),
 	}
-	return clusterResources
 }
 
 func isTurbineApp(deployment appsv1.Deployment) bool {

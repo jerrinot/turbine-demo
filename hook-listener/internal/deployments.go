@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"strconv"
 )
 
-func handleNewDeploymentRequest(w http.ResponseWriter, req *http.Request) {
-	var applicationDescriptor TurbineService
+func HandleNewDeploymentRequest(w http.ResponseWriter, req *http.Request) {
+	var applicationDescriptor turbineService
 	//todo: validate the descriptor
 
 	if err := json.NewDecoder(req.Body).Decode(&applicationDescriptor); err != nil {
@@ -41,13 +41,13 @@ func handleNewDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func handleListDeploymentRequest(w http.ResponseWriter, req *http.Request) {
+func HandleListDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 	deployments, err := clusterResources.DeploymentClient.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	var allTurbineApps []TurbineService
+	var allTurbineApps []turbineService
 	for _, deployment := range deployments.Items {
 		if isTurbineApp(deployment) {
 			port, err := strconv.Atoi(readAnnotation(deployment, "turbine/port", "0"))
@@ -68,7 +68,7 @@ func handleListDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 					}
 				}
 			}
-			turbineApp := TurbineService{
+			turbineApp := turbineService{
 				Name:     deployment.Name,
 				Image:    deployment.Spec.Template.Spec.Containers[0].Image,
 				Port:     int32(port),
@@ -85,7 +85,7 @@ func handleListDeploymentRequest(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func handleDeploymentDeleteRequest(w http.ResponseWriter, req *http.Request) {
+func HandleDeploymentDeleteRequest(w http.ResponseWriter, req *http.Request) {
 	pathParams := mux.Vars(req)
 	applicationName := pathParams["application"]
 	fmt.Printf("Handling delete %s request\n", applicationName)
