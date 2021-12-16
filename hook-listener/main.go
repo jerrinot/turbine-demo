@@ -9,11 +9,14 @@ import (
 )
 
 func main() {
-	internal.CreateClients("default")
+	controller := internal.NewKubernetesController("default")
+	deployment := internal.NewDeployment(controller)
+	hubController := internal.NewDockerHubController(controller)
+
 	r := mux.NewRouter()
-	r.HandleFunc("/webhook", internal.HandleDockerHubHookRequest).Methods(http.MethodPost)
-	r.HandleFunc("/deployment", internal.HandleListDeploymentRequest).Methods(http.MethodGet)
-	r.HandleFunc("/deployment", internal.HandleNewDeploymentRequest).Methods(http.MethodPost)
-	r.HandleFunc("/deployment/{application}", internal.HandleDeploymentDeleteRequest).Methods(http.MethodDelete)
+	r.HandleFunc("/webhook", hubController.HandleDockerHubHookRequest).Methods(http.MethodPost)
+	r.HandleFunc("/deployment", deployment.HandleListDeploymentRequest).Methods(http.MethodGet)
+	r.HandleFunc("/deployment", deployment.HandleNewDeploymentRequest).Methods(http.MethodPost)
+	r.HandleFunc("/deployment/{application}", deployment.HandleDeploymentDeleteRequest).Methods(http.MethodDelete)
 	log.Fatal(http.ListenAndServe(":8080", r))
 }

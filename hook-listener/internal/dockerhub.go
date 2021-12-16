@@ -24,20 +24,28 @@ type PushedData struct {
 	PushedAt uint64 `json:"pushed_at"`
 }
 
-func HandleDockerHubHookRequest(w http.ResponseWriter, req *http.Request) {
+type DockerHubController struct {
+	controller *KubernetesController
+}
+
+func NewDockerHubController(kubernetesController *KubernetesController) *DockerHubController {
+	return &DockerHubController{controller: kubernetesController}
+}
+
+func (handler DockerHubController) HandleDockerHubHookRequest(w http.ResponseWriter, req *http.Request) {
 	var event DockerHubEvent
 	if err := json.NewDecoder(req.Body).Decode(&event); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	deployments, err := listDeployment(context.TODO())
+	deployments, err := handler.controller.listDeployment(context.TODO())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	for _, deployment := range deployments.Items {
 		if isTurbineApp(deployment) && containsContainer(deployment, event.Repository.RepoName, event.PushedData.Tag) {
-			err := restartDeployment(deployment.Name, clusterResources.DeploymentClient)
+			err := handler.controller.restartDeployment(deployment.Name)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return

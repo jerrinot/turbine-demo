@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,16 +35,12 @@ func (c turbineService) String() string {
 		c.Image, c.Port, c.Replicas, c.Expose)
 }
 
-type clientResources struct {
+type KubernetesController struct {
 	DeploymentClient v1.DeploymentInterface
 	ServiceClient    v12.ServiceInterface
 	PodClient        v12.PodInterface
 	NodeClient       v12.NodeInterface
 }
-
-var (
-	clusterResources *clientResources
-)
 
 func readAnnotation(deployment appsv1.Deployment, annotation string, defaultValue string) string {
 	if val, ok := deployment.Spec.Template.Annotations[annotation]; ok {
@@ -52,17 +49,17 @@ func readAnnotation(deployment appsv1.Deployment, annotation string, defaultValu
 	return defaultValue
 }
 
-func restartDeployment(deploymentName string, deploymentClient v1.DeploymentInterface) error {
+func (controller *KubernetesController) restartDeployment(deploymentName string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		fmt.Printf("Trying to restart deployment %s\n", deploymentName)
-		result, err := deploymentClient.Get(context.TODO(), deploymentName, metav1.GetOptions{})
+		result, err := controller.DeploymentClient.Get(context.TODO(), deploymentName, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
 
 		//updating an annotation will make k8s to restart this deployment
 		result.Spec.Template.Annotations["turbine/restartedAt"] = time.Now().Format(time.RFC3339)
-		_, updateErr := deploymentClient.Update(context.TODO(), result, metav1.UpdateOptions{})
+		_, updateErr := controller.DeploymentClient.Update(context.TODO(), result, metav1.UpdateOptions{})
 		return updateErr
 	})
 }
@@ -197,11 +194,91 @@ func createK8sConfig() (*rest.Config, error) {
 	}
 }
 
-func listDeployment(ctx context.Context) (*appsv1.DeploymentList, error) {
-	return clusterResources.DeploymentClient.List(ctx, metav1.ListOptions{})
+func (controller *KubernetesController) listDeployment(ctx context.Context) (*appsv1.DeploymentList, error) {
+	return controller.DeploymentClient.List(ctx, metav1.ListOptions{})
 }
 
-func CreateClients(namespace string) {
+func (controller *KubernetesController) containsDeployment(name string) bool {
+	_, err := controller.DeploymentClient.Get(context.TODO(), name, metav1.GetOptions{})
+	return err != nil
+}
+
+func (controller *KubernetesController) newDeployment(service turbineService) error {
+	deploymentDescriptor := constructDeploymentDescriptor(service)
+	_, err := controller.DeploymentClient.Create(context.TODO(), deploymentDescriptor, metav1.CreateOptions{})
+	return err
+}
+
+func (controller *KubernetesController) exposeService(service turbineService) error {
+	descriptor := constructServiceDescriptor(service)
+	_, err := controller.ServiceClient.Create(context.TODO(), descriptor, metav1.CreateOptions{})
+	return err
+}
+
+func (controller *KubernetesController) getAllApps() ([]turbineService, error) {
+	deployments, err := controller.DeploymentClient.List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var allTurbineApps []turbineService
+	for _, deployment := range deployments.Items {
+		if isTurbineApp(deployment) {
+			port, err := strconv.Atoi(readAnnotation(deployment, "turbine/port", "0"))
+			if err != nil {
+				port = 0
+			}
+			exposed, err := strconv.ParseBool(readAnnotation(deployment, "turbine/exposed", "false"))
+			if err != nil {
+				exposed = false
+			}
+			var ip = ""
+			if exposed {
+				service, _ := controller.ServiceClient.Get(context.TODO(), deployment.Name, metav1.GetOptions{})
+				if service != nil {
+					ingress := service.Status.LoadBalancer.Ingress
+					if len(ingress) != 0 {
+						ip = ingress[0].IP
+					}
+				}
+			}
+			turbineApp := turbineService{
+				Name:     deployment.Name,
+				Image:    deployment.Spec.Template.Spec.Containers[0].Image,
+				Port:     int32(port),
+				Replicas: *deployment.Spec.Replicas,
+				Expose:   exposed,
+				IP:       ip,
+			}
+			allTurbineApps = append(allTurbineApps, turbineApp)
+		}
+	}
+	return allTurbineApps, nil
+}
+
+func (controller *KubernetesController) deleteApplication(name string) error {
+	deployment, err := controller.DeploymentClient.Get(context.TODO(), name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	if !isTurbineApp(*deployment) {
+		return errors.New(fmt.Sprintf("Application %s is not a Turbine-application", name))
+	}
+
+	serviceShouldExist := readAnnotation(*deployment, "turbine/exposed", "false")
+	err = controller.DeploymentClient.Delete(context.TODO(), name, metav1.DeleteOptions{})
+	if err != nil {
+		return err
+	}
+
+	if serviceShouldExist == "true" {
+		if err := controller.ServiceClient.Delete(context.TODO(), name, metav1.DeleteOptions{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func NewKubernetesController(namespace string) *KubernetesController {
 	config, err := createK8sConfig()
 	if err != nil {
 		panic(err.Error())
@@ -211,7 +288,7 @@ func CreateClients(namespace string) {
 		panic(err.Error())
 	}
 
-	clusterResources = &clientResources{
+	return &KubernetesController{
 		DeploymentClient: clientset.AppsV1().Deployments(namespace),
 		ServiceClient:    clientset.CoreV1().Services(namespace),
 		PodClient:        clientset.CoreV1().Pods(namespace),
