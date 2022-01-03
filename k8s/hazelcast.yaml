@@ -1,0 +1,7 @@
+apiVersion: hazelcast.com/v1alpha1
+kind: Hazelcast
+metadata:
+  name: hz-hazelcast
+spec:
+  repository: "hazelcast/hazelcast"
+  version: "5.0.2-slim"
