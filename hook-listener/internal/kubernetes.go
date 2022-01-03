@@ -200,7 +200,7 @@ func (controller *KubernetesProxy) listDeployment(ctx context.Context) (*appsv1.
 
 func (controller *KubernetesProxy) containsDeployment(ctx context.Context, name string) bool {
 	_, err := controller.DeploymentClient.Get(ctx, name, metav1.GetOptions{})
-	return err != nil
+	return err == nil
 }
 
 func (controller *KubernetesProxy) newDeployment(ctx context.Context, service turbineService) error {
