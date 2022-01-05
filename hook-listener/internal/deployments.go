@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
+	"log"
 	"net/http"
 )
 
@@ -21,7 +22,7 @@ func (dc *DeploymentController) HandleNewDeploymentRequest(w http.ResponseWriter
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	fmt.Printf("Request to deploy a new application: %s\n", applicationDescriptor)
+	log.Printf("Request to deploy a new application: %s\n", applicationDescriptor)
 	if dc.kubernetesProxy.containsDeployment(r.Context(), applicationDescriptor.Name) {
 		http.Error(w, fmt.Sprintf("Application %s already exist", applicationDescriptor.Name), http.StatusConflict)
 		return
@@ -56,7 +57,7 @@ func (dc *DeploymentController) HandleListDeploymentRequest(w http.ResponseWrite
 func (dc *DeploymentController) HandleDeploymentDeleteRequest(w http.ResponseWriter, r *http.Request) {
 	pathParams := mux.Vars(r)
 	applicationName := pathParams["application"]
-	fmt.Printf("Handling delete %s request\n", applicationName)
+	log.Printf("Handling delete %s request\n", applicationName)
 	if err := dc.kubernetesProxy.deleteApplication(r.Context(), applicationName); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

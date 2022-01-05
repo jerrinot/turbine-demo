@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 	"k8s.io/client-go/util/retry"
+	"log"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -51,7 +52,7 @@ func readAnnotation(d appsv1.Deployment, annotation string, defaultVal string) s
 
 func (kp *KubernetesProxy) restartDeployment(ctx context.Context, name string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		fmt.Printf("Trying to restart deployment %s\n", name)
+		log.Printf("Trying to restart deployment %s\n", name)
 		result, err := kp.DeploymentClient.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return err
