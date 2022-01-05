@@ -27,24 +27,24 @@ type DockerHubController struct {
 	proxy *KubernetesProxy
 }
 
-func NewDockerHubController(proxy *KubernetesProxy) *DockerHubController {
-	return &DockerHubController{proxy: proxy}
+func NewDockerHubController(p *KubernetesProxy) *DockerHubController {
+	return &DockerHubController{proxy: p}
 }
 
-func (handler DockerHubController) HandleDockerHubHookRequest(w http.ResponseWriter, req *http.Request) {
+func (handler DockerHubController) HandleDockerHubHookRequest(w http.ResponseWriter, r *http.Request) {
 	var event dockerHubEvent
-	if err := json.NewDecoder(req.Body).Decode(&event); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	deployments, err := handler.proxy.listDeployment(req.Context())
+	deployments, err := handler.proxy.listDeployment(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	for _, deployment := range deployments.Items {
 		if isTurbineApp(deployment) && containsContainer(deployment, event.Repository.RepoName, event.PushedData.Tag) {
-			err := handler.proxy.restartDeployment(req.Context(), deployment.Name)
+			err := handler.proxy.restartDeployment(r.Context(), deployment.Name)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return

@@ -42,45 +42,45 @@ type KubernetesProxy struct {
 	NodeClient       v12.NodeInterface
 }
 
-func readAnnotation(deployment appsv1.Deployment, annotation string, defaultValue string) string {
-	if val, ok := deployment.Spec.Template.Annotations[annotation]; ok {
+func readAnnotation(d appsv1.Deployment, annotation string, defaultVal string) string {
+	if val, ok := d.Spec.Template.Annotations[annotation]; ok {
 		return val
 	}
-	return defaultValue
+	return defaultVal
 }
 
-func (controller *KubernetesProxy) restartDeployment(ctx context.Context, deploymentName string) error {
+func (kp *KubernetesProxy) restartDeployment(ctx context.Context, name string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		fmt.Printf("Trying to restart deployment %s\n", deploymentName)
-		result, err := controller.DeploymentClient.Get(ctx, deploymentName, metav1.GetOptions{})
+		fmt.Printf("Trying to restart deployment %s\n", name)
+		result, err := kp.DeploymentClient.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
 
 		//updating an annotation will make k8s to restart this deployment
 		result.Spec.Template.Annotations["turbine/restartedAt"] = time.Now().Format(time.RFC3339)
-		_, updateErr := controller.DeploymentClient.Update(ctx, result, metav1.UpdateOptions{})
+		_, updateErr := kp.DeploymentClient.Update(ctx, result, metav1.UpdateOptions{})
 		return updateErr
 	})
 }
 
-func constructServiceDescriptor(applicationDescriptor turbineService) *apiv1.Service {
+func constructServiceDescriptor(ts turbineService) *apiv1.Service {
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: applicationDescriptor.Name,
+			Name: ts.Name,
 			Labels: map[string]string{
-				"app": applicationDescriptor.Name,
+				"app": ts.Name,
 			},
 		},
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
 				{
-					Port:     applicationDescriptor.Port,
+					Port:     ts.Port,
 					Protocol: apiv1.ProtocolTCP,
 				},
 			},
 			Selector: map[string]string{
-				"app": applicationDescriptor.Name,
+				"app": ts.Name,
 			},
 			Type: "LoadBalancer",
 		},
@@ -88,41 +88,41 @@ func constructServiceDescriptor(applicationDescriptor turbineService) *apiv1.Ser
 	return service
 }
 
-func constructDeploymentDescriptor(applicationDescriptor turbineService) *appsv1.Deployment {
+func constructDeploymentDescriptor(ts turbineService) *appsv1.Deployment {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: applicationDescriptor.Name,
+			Name: ts.Name,
 			Labels: map[string]string{
-				"app": applicationDescriptor.Name,
+				"app": ts.Name,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: Int32Ptr(applicationDescriptor.Replicas),
+			Replicas: Int32Ptr(ts.Replicas),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": applicationDescriptor.Name,
+					"app": ts.Name,
 				},
 			},
 			Template: apiv1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app": applicationDescriptor.Name,
+						"app": ts.Name,
 					},
 					Annotations: map[string]string{
 						"turbine/configmap": "turbine-sidecar-config",
 						"turbine/enabled":   "true",
-						"turbine/exposed":   strconv.FormatBool(applicationDescriptor.Expose),
-						"turbine/port":      strconv.Itoa(int(applicationDescriptor.Port)),
+						"turbine/exposed":   strconv.FormatBool(ts.Expose),
+						"turbine/port":      strconv.Itoa(int(ts.Port)),
 					},
 				},
 				Spec: apiv1.PodSpec{
 					Containers: []apiv1.Container{
 						{
-							Name:  applicationDescriptor.Name,
-							Image: applicationDescriptor.Image,
+							Name:  ts.Name,
+							Image: ts.Image,
 							Ports: []apiv1.ContainerPort{
 								{
-									ContainerPort: applicationDescriptor.Port,
+									ContainerPort: ts.Port,
 								},
 							},
 							ImagePullPolicy: apiv1.PullAlways,
@@ -158,8 +158,8 @@ func constructDeploymentDescriptor(applicationDescriptor turbineService) *appsv1
 	return deployment
 }
 
-func containsContainer(deployment appsv1.Deployment, imageName string, tag string) bool {
-	for _, container := range deployment.Spec.Template.Spec.Containers {
+func containsContainer(d appsv1.Deployment, imageName string, tag string) bool {
+	for _, container := range d.Spec.Template.Spec.Containers {
 		nameAndTag := strings.Split(container.Image, ":")
 		deploymentName := nameAndTag[0]
 		deploymentTag := "latest"
@@ -194,29 +194,29 @@ func createK8sConfig() (*rest.Config, error) {
 	}
 }
 
-func (controller *KubernetesProxy) listDeployment(ctx context.Context) (*appsv1.DeploymentList, error) {
-	return controller.DeploymentClient.List(ctx, metav1.ListOptions{})
+func (kp *KubernetesProxy) listDeployment(ctx context.Context) (*appsv1.DeploymentList, error) {
+	return kp.DeploymentClient.List(ctx, metav1.ListOptions{})
 }
 
-func (controller *KubernetesProxy) containsDeployment(ctx context.Context, name string) bool {
-	_, err := controller.DeploymentClient.Get(ctx, name, metav1.GetOptions{})
+func (kp *KubernetesProxy) containsDeployment(ctx context.Context, name string) bool {
+	_, err := kp.DeploymentClient.Get(ctx, name, metav1.GetOptions{})
 	return err == nil
 }
 
-func (controller *KubernetesProxy) newDeployment(ctx context.Context, service turbineService) error {
-	deploymentDescriptor := constructDeploymentDescriptor(service)
-	_, err := controller.DeploymentClient.Create(ctx, deploymentDescriptor, metav1.CreateOptions{})
+func (kp *KubernetesProxy) newDeployment(ctx context.Context, ts turbineService) error {
+	desc := constructDeploymentDescriptor(ts)
+	_, err := kp.DeploymentClient.Create(ctx, desc, metav1.CreateOptions{})
 	return err
 }
 
-func (controller *KubernetesProxy) exposeService(ctx context.Context, service turbineService) error {
-	descriptor := constructServiceDescriptor(service)
-	_, err := controller.ServiceClient.Create(ctx, descriptor, metav1.CreateOptions{})
+func (kp *KubernetesProxy) exposeService(ctx context.Context, ts turbineService) error {
+	desc := constructServiceDescriptor(ts)
+	_, err := kp.ServiceClient.Create(ctx, desc, metav1.CreateOptions{})
 	return err
 }
 
-func (controller *KubernetesProxy) getAllApps(ctx context.Context) ([]turbineService, error) {
-	deployments, err := controller.DeploymentClient.List(ctx, metav1.ListOptions{})
+func (kp *KubernetesProxy) getAllApps(ctx context.Context) ([]turbineService, error) {
+	deployments, err := kp.DeploymentClient.List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +233,7 @@ func (controller *KubernetesProxy) getAllApps(ctx context.Context) ([]turbineSer
 			}
 			var ip = ""
 			if exposed {
-				service, _ := controller.ServiceClient.Get(ctx, deployment.Name, metav1.GetOptions{})
+				service, _ := kp.ServiceClient.Get(ctx, deployment.Name, metav1.GetOptions{})
 				if service != nil {
 					ingress := service.Status.LoadBalancer.Ingress
 					if len(ingress) != 0 {
@@ -255,8 +255,8 @@ func (controller *KubernetesProxy) getAllApps(ctx context.Context) ([]turbineSer
 	return allTurbineApps, nil
 }
 
-func (controller *KubernetesProxy) deleteApplication(ctx context.Context, name string) error {
-	deployment, err := controller.DeploymentClient.Get(ctx, name, metav1.GetOptions{})
+func (kp *KubernetesProxy) deleteApplication(ctx context.Context, name string) error {
+	deployment, err := kp.DeploymentClient.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -265,13 +265,13 @@ func (controller *KubernetesProxy) deleteApplication(ctx context.Context, name s
 	}
 
 	serviceShouldExist := readAnnotation(*deployment, "turbine/exposed", "false")
-	err = controller.DeploymentClient.Delete(ctx, name, metav1.DeleteOptions{})
+	err = kp.DeploymentClient.Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
 
 	if serviceShouldExist == "true" {
-		if err := controller.ServiceClient.Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+		if err := kp.ServiceClient.Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
 			return err
 		}
 	}
@@ -296,7 +296,7 @@ func NewKubernetesProxy(namespace string) *KubernetesProxy {
 	}
 }
 
-func isTurbineApp(deployment appsv1.Deployment) bool {
-	annotation := readAnnotation(deployment, "turbine/enabled", "false")
+func isTurbineApp(d appsv1.Deployment) bool {
+	annotation := readAnnotation(d, "turbine/enabled", "false")
 	return annotation == "true"
 }
